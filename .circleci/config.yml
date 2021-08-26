@@ -1,101 +1,52 @@
 version: 2
 jobs:
-  format:
+  build_web:
     docker:
-      - image: circleci/node:12.19
+      - image: circleci/node:14.16
     steps:
+      - setup_remote_docker:
+          docker_layer_caching: false
       - checkout
       - restore_cache:
-          name: Restore Yarn Package Cache
+          name: Restore npm Package Cache
           keys:
-            - yarn-packages-{{ .Branch }}-{{ checksum "yarn.lock" }}
-            - yarn-packages-{{ .Branch }}
-            - yarn-packages-master
-            - yarn-packages-
+            - npm-packages-{{ .Branch }}-{{ checksum "package.json" }}
+            - npm-packages-{{ .Branch }}
+            - npm-packages-master
+            - npm-packages-
       - run:
-          name: Install Dependencies
-          command: yarn install
+          name: Install NPM
+          command: npm install
       - save_cache:
-          name: Save Yarn Package Cache
-          key: yarn-packages-{{ .Branch }}-{{ checksum "yarn.lock" }}
+          name: Save NPM Packages Cache
+          key: npm-packages-{{ .Branch }}-{{ checksum "package.json" }}
           paths:
             - node_modules/
       - run:
-          name: Check code formatting
-          command: yarn run format-ci
-  test:
-    docker:
-      - image: circleci/node:12.19
-    steps:
-      - checkout
-      - restore_cache:
-          name: Restore Yarn Package Cache
-          keys:
-            - yarn-packages-{{ .Branch }}-{{ checksum "yarn.lock" }}
-            - yarn-packages-{{ .Branch }}
-            - yarn-packages-master
-            - yarn-packages-
+          name: Install AWS CLI
+          command: 
+            curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64-2.0.30.zip" -o "awscliv2.zip" && 
+            unzip awscliv2.zip &&
+            sudo ./aws/install
       - run:
-          name: Install Dependencies
-          command: yarn install
-      - save_cache:
-          name: Save Yarn Package Cache
-          key: yarn-packages-{{ .Branch }}-{{ checksum "yarn.lock" }}
-          paths:
-            - node_modules/
+          name: Install jq
+          command: sudo apt-get install jq
       - run:
-          name: Run test suite
-          command: yarn run test-ci
-  build:
-    docker:
-      - image: circleci/node:12.19
-    steps:
-      - checkout
-      - restore_cache:
-          name: Restore Yarn Package Cache
-          keys:
-            - yarn-packages-{{ .Branch }}-{{ checksum "yarn.lock" }}
-            - yarn-packages-{{ .Branch }}
-            - yarn-packages-master
-            - yarn-packages-
+          name: Copy Environment File
+          command: ./scripts/encode_env.sh
       - run:
-          name: Install Dependencies
-          command: yarn install
-      - save_cache:
-          name: Save Yarn Package Cache
-          key: yarn-packages-{{ .Branch }}-{{ checksum "yarn.lock" }}
-          paths:
-            - node_modules/
+          name: Build the project
+          command: CI=false npm run build
       - run:
-          name: Build client application
-          command: yarn run build
-  audit:
-    docker:
-      - image: circleci/node:12.19
-    steps:
-      - checkout
-      - restore_cache:
-          name: Restore Yarn Package Cache
-          keys:
-            - yarn-packages-{{ .Branch }}-{{ checksum "yarn.lock" }}
-            - yarn-packages-{{ .Branch }}
-            - yarn-packages-master
-            - yarn-packages-
-      - run:
-          name: Install Dependencies
-          command: yarn install
-      - save_cache:
-          name: Save Yarn Package Cache
-          key: yarn-packages-{{ .Branch }}-{{ checksum "yarn.lock" }}
-          paths:
-            - node_modules/
-      - run:
-          name: Audit dependencies
-          command: yarn run audit
+          name: Deploy the image
+          command: ./scripts/deploy.sh
 workflows:
   version: 2
-  format_test_build_audit:
+  build:
     jobs:
-      - format
-      - test
-      - build
+      - build_web:
+          filters:
+            branches:
+              only:
+                - master
+                - production
